@@ -10,6 +10,9 @@ const client = new WebhookClient({url: process.env.WEBHOOK_URL});
 const db = sqlite3(process.env.DB_FILE ?? 'data.db');
 const webhookId = client.id;
 
+const RATE_LIMIT = 1500;
+const RATE_LIMIT_WINDOW = 15 * 60;
+
 // Set up database schema
 db.exec(`
     CREATE TABLE IF NOT EXISTS latest (
@@ -49,7 +52,16 @@ if (!ACCOUNTS || !ACCOUNTS.length) {
     throw new Error('No accounts specified');
 }
 
+// Number of times the poll function will be called per ratelimit window
+const execsPerWindow = RATE_LIMIT_WINDOW / pollingRate;
+// Number of API endpoint requests per ratelimit window
+const fetchesPerWindow = execsPerWindow * ACCOUNTS.length;
+
 console.log(`Watching accounts ${ACCOUNTS.join(', ')}`);
+console.log(`${fetchesPerWindow} API requests per ratelimit window (maximum is ${RATE_LIMIT})`);
+if (fetchesPerWindow > RATE_LIMIT) {
+    throw new Error('API request rate exceeds rate limit');
+}
 
 const fetchedUsers = (await twitter.v2.usersByUsernames(ACCOUNTS, {'user.fields': ['profile_image_url', 'description', 'protected']})).data;
 
