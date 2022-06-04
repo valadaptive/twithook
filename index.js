@@ -56,9 +56,10 @@ const fetchTweets = async () => {
     const newTweets = [];
     for (const user of fetchedUsers) {
         const {id, username} = user;
-        const {latest_tweet_id: latest} = statements.getLatest.get({webhookId, twitterId: id});
+        const latestResult = statements.getLatest.get({webhookId, twitterId: id});
         // Our first time running
-        if (!latest) continue;
+        if (!latestResult) continue;
+        const latest = latestResult.latest_tweet_id;
         const {tweets} = await twitter.v2.userTimeline(id, {
             exclude: ['retweets', 'replies'],
             'user.fields': ['name']
