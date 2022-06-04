@@ -77,7 +77,7 @@ const fetchTweets = async () => {
             newTweets.push({tweet: tweets[i], user});
         }
 
-        console.log(`${i} new tweets from @${user.username}`);
+        if (i > 0) console.log(`${i} new tweets from @${user.username}`);
 
         if (i === tweets.length) {
             await client.send({
