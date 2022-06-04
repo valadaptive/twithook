@@ -49,6 +49,8 @@ if (!ACCOUNTS || !ACCOUNTS.length) {
     throw new Error('No accounts specified');
 }
 
+console.log(`Watching accounts ${ACCOUNTS.join(', ')}`);
+
 const fetchedUsers = (await twitter.v2.usersByUsernames(ACCOUNTS, {'user.fields': ['profile_image_url', 'description', 'protected']})).data;
 
 const fetchTweets = async () => {
@@ -74,6 +76,8 @@ const fetchTweets = async () => {
             if (tweets[i].id <= latest) break;
             newTweets.push({tweet: tweets[i], user});
         }
+
+        console.log(`${i} new tweets from @${user.username}`);
 
         if (i === tweets.length) {
             await client.send({
