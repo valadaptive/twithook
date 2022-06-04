@@ -55,7 +55,7 @@ const fetchTweets = async () => {
     const latestUpdates = [];
     const newTweets = [];
     for (const user of fetchedUsers) {
-        const {id, username} = user;
+        const {id} = user;
         const latestResult = statements.getLatest.get({webhookId, twitterId: id});
         // Our first time running
         if (!latestResult) continue;
