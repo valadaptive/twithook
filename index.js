@@ -13,6 +13,9 @@ const webhookId = client.id;
 const RATE_LIMIT = 1500;
 const RATE_LIMIT_WINDOW = 15 * 60;
 
+const MONTHLY_RATE_LIMIT = 500000;
+const MONTHLY_RATE_LIMIT_WINDOW = 60 * 60 * 24 * 30;
+
 // Set up database schema
 db.exec(`
     CREATE TABLE IF NOT EXISTS latest (
@@ -57,9 +60,13 @@ const execsPerWindow = RATE_LIMIT_WINDOW / pollingRate;
 // Number of API endpoint requests per ratelimit window
 const fetchesPerWindow = execsPerWindow * ACCOUNTS.length;
 
+const execsPerMonthlyWindow = MONTHLY_RATE_LIMIT_WINDOW / pollingRate;
+const fetchesPerMonthlyWindow = execsPerMonthlyWindow * ACCOUNTS.length * 10;
+
 console.log(`Watching accounts ${ACCOUNTS.join(', ')}`);
 console.log(`${fetchesPerWindow} API requests per ratelimit window (maximum is ${RATE_LIMIT})`);
-if (fetchesPerWindow > RATE_LIMIT) {
+console.log(`${fetchesPerMonthlyWindow} API requests per monthly ratelimit window (maximum is ${MONTHLY_RATE_LIMIT})`);
+if (fetchesPerWindow > RATE_LIMIT || fetchesPerMonthlyWindow > MONTHLY_RATE_LIMIT) {
     throw new Error('API request rate exceeds rate limit');
 }
 
@@ -71,17 +78,18 @@ const fetchTweets = async () => {
     for (const user of fetchedUsers) {
         const {id} = user;
         const latestResult = statements.getLatest.get({webhookId, twitterId: id});
+        const latest = latestResult?.latest_tweet_id;
         const {tweets} = await twitter.v2.userTimeline(id, {
             exclude: ['retweets', 'replies'],
-            'user.fields': ['name']
+            'user.fields': ['name'],
+            since_id: latest
         });
         // No tweets :(
         if (!tweets.length) continue;
         latestUpdates.push({webhookId, twitterId: id, latestId: tweets[0].id});
 
         // Our first time running
-        if (!latestResult) continue;
-        const latest = latestResult.latest_tweet_id;
+        if (!latest) continue;
 
         let i = 0;
         for (; i < tweets.length; i++) {
@@ -91,7 +99,7 @@ const fetchTweets = async () => {
 
         if (i > 0) console.log(`${i} new tweets from @${user.username}`);
 
-        if (i === tweets.length) {
+        if (tweets.length >= 10) {
             await client.send({
                 content: 'Too many tweets! Displaying 10 most recent.',
                 username: user.name,
