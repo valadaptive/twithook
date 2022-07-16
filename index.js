@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import {TwitterApi} from 'twitter-api-v2';
+import {TwitterApi, ApiResponseError} from 'twitter-api-v2';
 import {WebhookClient} from 'discord.js';
 import sqlite3 from 'better-sqlite3';
 
@@ -73,53 +73,61 @@ if (fetchesPerWindow > RATE_LIMIT || fetchesPerMonthlyWindow > MONTHLY_RATE_LIMI
 const fetchedUsers = (await twitter.v2.usersByUsernames(ACCOUNTS, {'user.fields': ['profile_image_url', 'description', 'protected']})).data;
 
 const fetchTweets = async () => {
-    const latestUpdates = [];
-    const newTweets = [];
-    for (const user of fetchedUsers) {
-        const {id} = user;
-        const latestResult = statements.getLatest.get({webhookId, twitterId: id});
-        const latest = latestResult?.latest_tweet_id;
-        const {tweets} = await twitter.v2.userTimeline(id, {
-            exclude: ['retweets', 'replies'],
-            'user.fields': ['name'],
-            since_id: latest
-        });
-        // No tweets :(
-        if (!tweets.length) continue;
-        latestUpdates.push({webhookId, twitterId: id, latestId: tweets[0].id});
+    try {
+        const latestUpdates = [];
+        const newTweets = [];
+        for (const user of fetchedUsers) {
+            const {id} = user;
+            const latestResult = statements.getLatest.get({webhookId, twitterId: id});
+            const latest = latestResult?.latest_tweet_id;
+            const {tweets} = await twitter.v2.userTimeline(id, {
+                exclude: ['retweets', 'replies'],
+                'user.fields': ['name'],
+                since_id: latest
+            });
+            // No tweets :(
+            if (!tweets.length) continue;
+            latestUpdates.push({webhookId, twitterId: id, latestId: tweets[0].id});
 
-        // Our first time running
-        if (!latest) continue;
+            // Our first time running
+            if (!latest) continue;
 
-        let i = 0;
-        for (; i < tweets.length; i++) {
-            if (tweets[i].id <= latest) break;
-            newTweets.push({tweet: tweets[i], user});
+            let i = 0;
+            for (; i < tweets.length; i++) {
+                if (tweets[i].id <= latest) break;
+                newTweets.push({tweet: tweets[i], user});
+            }
+
+            if (i > 0) console.log(`${i} new tweets from @${user.username}`);
+
+            if (tweets.length >= 10) {
+                await client.send({
+                    content: 'Too many tweets! Displaying 10 most recent.',
+                    username: user.name,
+                    avatarURL: user.profile_image_url
+                });
+            }
         }
+        // Sort by ID/timestamp
+        newTweets.sort((a, b) => a.tweet.id > b.tweet.id ? 1 : -1);
 
-        if (i > 0) console.log(`${i} new tweets from @${user.username}`);
-
-        if (tweets.length >= 10) {
+        for (const {tweet, user} of newTweets) {
             await client.send({
-                content: 'Too many tweets! Displaying 10 most recent.',
+                content: `https://twitter.com/${user.username}/status/${tweet.id}`,
                 username: user.name,
                 avatarURL: user.profile_image_url
             });
         }
-    }
-    // Sort by ID/timestamp
-    newTweets.sort((a, b) => a.tweet.id > b.tweet.id ? 1 : -1);
 
-    for (const {tweet, user} of newTweets) {
-        await client.send({
-            content: `https://twitter.com/${user.username}/status/${tweet.id}`,
-            username: user.name,
-            avatarURL: user.profile_image_url
-        });
+        // we did it reddit
+        statements.updateLatest(latestUpdates);
+    } catch (err) {
+        if ((err instanceof ApiResponseError) && err.code === 503) {
+            // Twitter is down. Just wait for it to come back online.
+            return;
+        }
+        throw err;
     }
-
-    // we did it reddit
-    statements.updateLatest(latestUpdates);
 };
 
 setInterval(fetchTweets, pollingRate * 1000);
