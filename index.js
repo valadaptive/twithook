@@ -9,6 +9,9 @@ const twitter = new TwitterApi(process.env.TWITTER_BEARER_TOKEN);
 const client = new WebhookClient({url: process.env.WEBHOOK_URL});
 const db = sqlite3(process.env.DB_FILE ?? 'data.db');
 const webhookId = client.id;
+const maxTweetsAtOnce = Number.isFinite(Number(process.env.MAX_TWEETS_AT_ONCE)) ?
+    Number(process.env.MAX_TWEETS_AT_ONCE) :
+    10;
 
 const RATE_LIMIT = 1500;
 const RATE_LIMIT_WINDOW = 15 * 60;
@@ -100,9 +103,9 @@ const fetchTweets = async () => {
 
             if (i > 0) console.log(`${i} new tweets from @${user.username}`);
 
-            if (tweets.length >= 10) {
+            if (tweets.length >= maxTweetsAtOnce) {
                 await client.send({
-                    content: 'Too many tweets! Displaying 10 most recent.',
+                    content: `Too many tweets! Displaying ${maxTweetsAtOnce} most recent.`,
                     username: user.name,
                     avatarURL: user.profile_image_url
                 });
