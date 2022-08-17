@@ -110,7 +110,8 @@ const fetchTweets = async (users: UserV2[]): Promise<void> => {
             const {tweets} = await twitter.v2.userTimeline(id, {
                 exclude: ['retweets', 'replies'],
                 'user.fields': ['name'],
-                since_id: latest
+                since_id: latest,
+                max_results: config.maxTweetsAtOnce
             });
             // No tweets :(
             if (!tweets.length) continue;
